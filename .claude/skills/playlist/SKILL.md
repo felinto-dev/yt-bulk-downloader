@@ -49,6 +49,14 @@ Confirme: "Vou baixar **{N} vídeos** da playlist **{nome}** na qualidade **{qua
 
 ### 5. Baixar
 
+**Se o tipo escolhido for "Apenas transcrição" ou envolver transcrição:**
+- Liste todos os vídeos da playlist com `--flat-playlist --print "%(id)s"`.
+- Para cada vídeo, delegue a um subagente que invoque a skill `/transcript` com `https://www.youtube.com/watch?v={VIDEO_ID}`, passando a pasta destino e outras opções relevantes.
+- Use `--download-archive` para rastrear quais vídeos já tiveram transcrição baixada.
+- Não baixe manualmente nem converta VTT — deixe a skill `/transcript` cuidar da deduplicação e formatação.
+
+**Se o tipo escolhido for vídeo ou áudio:**
+
 Mapeamento de qualidade:
 - "melhor disponível": `-f "bestvideo+bestaudio/best"`
 - "1080p": `-f "bestvideo[height<=1080]+bestaudio/best[height<=1080]"`

@@ -28,7 +28,10 @@ Instale se necessário.
 yt-dlp --list-subs "URL"
 ```
 
-Verifique se há legendas manuais ou auto-geradas.
+Verifique se há legendas manuais ou auto-geradas. Use essa informação para determinar:
+- Quais idiomas estão disponíveis (o código varia: `pt`, `pt-BR`, `pt-PT`, `pt-orig`, `en`, etc.)
+- Se há legendas manuais ou apenas auto-geradas
+- **NUNCA** assuma o código de idioma. Sempre verifique com `--list-subs` antes de usar `--sub-lang`.
 
 ### 3. Baixar legenda
 
@@ -46,27 +49,68 @@ yt-dlp --write-auto-sub --skip-download --sub-langs "pt.*" --output "transcript_
 
 ### 4. Converter VTT para texto limpo
 
+**IMPORTANTE:** O YouTube repete cada linha de legenda dentro do mesmo cue (VTT). A conversão DEVE:
+1. Remover linhas em branco
+2. Deduplicar linhas consecutivas idênticas (não usar `seen` global — apenas consecutivas)
+3. Adicionar quebras de parágrafo nos finais de sentença (`.`, `!`, `?`)
+
 Obtenha o título do vídeo para o nome do arquivo:
 ```bash
 yt-dlp --print "%(title)s" "URL" | tr '/' '_' | tr ':' '-' | tr '?' '' | tr '"' ''
 ```
 
-Converta o VTT para texto deduplicado:
+Converta o VTT para texto limpo com este script Python:
 ```python
-import re
-seen = set()
-with open('transcript_temp.pt.vtt', 'r') as f:
-    for line in f:
-        line = line.strip()
-        if line and not line.startswith('WEBVTT') and not line.startswith('Kind:') and not line.startswith('Language:') and '-->' not in line:
-            clean = re.sub('<[^>]*>', '', line)
-            clean = clean.replace('&amp;', '&').replace('&gt;', '>').replace('&lt;', '<')
-            if clean and clean not in seen:
-                print(clean)
-                seen.add(clean)
+import re, sys
+
+vtt_file = sys.argv[1]
+out_file = sys.argv[2]
+
+with open(vtt_file, 'r', encoding='utf-8', errors='replace') as f:
+    lines = f.readlines()
+
+# 1) Remove blank lines, timestamps, headers e tags HTML
+cleaned = []
+for line in lines:
+    stripped = line.strip()
+    if not stripped:
+        continue
+    if stripped.startswith('WEBVTT') or stripped.startswith('Kind:') or stripped.startswith('Language:'):
+        continue
+    if '-->' in stripped or re.match(r'^\d+$', stripped):
+        continue
+    text = re.sub(r'<[^>]*>', '', stripped)
+    text = text.replace('&amp;', '&').replace('&gt;', '>').replace('&lt;', '<')
+    if text:
+        cleaned.append(text)
+
+# 2) Deduplica linhas consecutivas
+deduped = []
+prev = None
+for line in cleaned:
+    if line != prev:
+        deduped.append(line)
+        prev = line
+
+# 3) Adiciona quebras de parágrafo nos finais de sentença
+result = []
+for i, line in enumerate(deduped):
+    if i > 0:
+        prev_line = deduped[i - 1]
+        if prev_line and prev_line[-1] in '.!?':
+            result.append('')
+    result.append(line)
+
+with open(out_file, 'w', encoding='utf-8') as f:
+    f.write('\n'.join(result) + '\n')
 ```
 
-Salve como `{TITULO}.txt` e remova o `.vtt`.
+Uso:
+```bash
+python3 script.py "transcript_temp.pt.vtt" "{TITULO}.txt"
+```
+
+Remova o `.vtt` após a conversão.
 
 ### 5. Formatar com Gemini CLI
 
